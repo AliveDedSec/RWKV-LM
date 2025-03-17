@@ -1,19 +1,72 @@
-# The RWKV Language Model (and my LM tricks)
+# RWKV: Parallelizable RNN with Transformer-level LLM Performance (pronounced as "RwaKuv" (rʌkuv in IPA), from 4 major params: R W K V)
 
-> RWKV homepage: https://www.rwkv.com/ https://wiki.rwkv.com/
+RWKV website: https://rwkv.com (with 30+ RWKV-related papers)
 
-### HOW TO TEST TRAINING RWKV-5 on MiniPile (1.5G tokens) ##
+RWKV twitter: https://twitter.com/BlinkDL_AI (lastest news)
 
-For reference, use python 3.10, torch==1.13.1+cu117, cuda 11.7.1
+RWKV discord: https://discord.gg/bDSBUMeFpc (9k+ members)
 
-For best performance, use python 3.10, torch 2.1.2+cu121 (or latest), cuda 12.3+, **latest deepspeed**, but **keep pytorch-lightning==1.9.5**
+RWKV-7 "Goose" is the strongest **linear-time** & **constant-space** (no kv-cache) & **attention-free** & 100% RNN architecture on this planet at this moment, suitable for LLM and multimodal applications and more (see [rwkv.com](https://rwkv.com)).
+
+**VERY IMPORTANT: Use PreLN LayerNorm (instead of RMSNorm) for RWKV.** I think it's related to better initial state, because I am not using trainable initial state (found it useless when using LayerNorm).
+
+RWKV-7 is a [meta-in-context learner](https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v7.png), test-time-training its state on the context via in-context gradient descent at every token.
+
+RWKV is a [Linux Foundation AI project](https://lfaidata.foundation/projects/rwkv/), so totally free. RWKV runtime is [already in Windows & Office](https://x.com/BlinkDL_AI/status/1831012419508019550).
+
+You are welcome to ask the RWKV community (such as [RWKV discord](https://discord.gg/bDSBUMeFpc)) for advice on upgrading your attention/ssm models to rwkv7 models :)
+
+<img src="RWKV-v7-niah.png">
+
+RWKV-7 0.1B Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
+
+RWKV-6 7B Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
+
+WebGPU Demo: https://cryscan.github.io/web-rwkv-puzzles/#/chat
+
+Latest RWKV weights: https://huggingface.co/BlinkDL
+
+===
+
+RWKV-Runner GUI: https://github.com/josStorer/RWKV-Runner/releases
+
+Ai00 Server: https://github.com/Ai00-X/ai00_server
+
+RWKV pip pkg: https://pypi.org/project/rwkv/
+
+PEFT (Lora etc.): https://github.com/JL-er/RWKV-PEFT
+
+RLHF: https://github.com/OpenMOSE/RWKV-LM-RLHF
+
+400+ RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
+
+===
+
+RWKV-5/6 Eagle/Finch paper: https://arxiv.org/abs/2404.05892
+
+Chat demo code: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py
+
+**RWKV-7 demo code**: https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v7
+
+https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v7/rwkv_v7_demo.py (GPT mode)
+
+https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v7/rwkv_v7_demo_rnn.py (RNN mode)
+
+https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v7/rwkv_v7_demo_fast.py (Both mode, fastest)
+
+RWKV-6 demo code: https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v5/rwkv_v6_demo.py
+
+RWKV-6 demo code: https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v6_demo.py
+
+## HOW TO TRAIN RWKV-5/6/7 on MiniPile (1.5G tokens) ##
+
+For reference, use python 3.10+, torch 2.5+, cuda 12.5+, latest deepspeed, but **keep pytorch-lightning==1.9.5**
+
+**Train RWKV-7**: use /RWKV-v5/ and use --my_testing "x070" in demo-training-prepare.sh and demo-training-run.sh
+
+**Train RWKV-6**: use /RWKV-v5/ and use --my_testing "x060" in demo-training-prepare.sh and demo-training-run.sh
 
 ```
-reference:
-pip install torch==1.13.1+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
-pip install pytorch-lightning==1.9.5 deepspeed==0.7.0 wandb ninja
-
-best performance:
 pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu121
 pip install pytorch-lightning==1.9.5 deepspeed wandb ninja --upgrade
 
@@ -30,6 +83,8 @@ You can run your model using https://pypi.org/project/rwkv/ (use "rwkv_vocab_v20
 
 Use https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v5/make_data.py to prepare binidx data from jsonl, and compute "--my_exit_tokens" and "--magic_prime".
 
+Much faster tokenizer of large data: https://github.com/cahya-wirawan/json2bin https://github.com/cahya-wirawan/rwkv-tokenizer https://github.com/m8than/RWKV-World-Tokenizer-CPP
+
 The "epoch" in train.py is "mini-epoch" (not real epoch. only for convenience), and 1 mini-epoch = 40320 * ctx_len tokens.
 
 For example, if your binidx has 1498226207 tokens and ctxlen=4096, set "--my_exit_tokens 1498226207" (this will override epoch_count), and it will be 1498226207/(40320 * 4096) = 9.07 miniepochs. The trainer will auto-exit after "--my_exit_tokens" tokens. Set "--magic_prime" to the largest 3n+2 prime smaller than datalen/ctxlen-1 (= 1498226207/4096-1 = 365776), which is "--magic_prime 365759" in this case.
@@ -38,19 +93,32 @@ simple: prepare SFT jsonl => repeat your SFT data 3 or 4 times in make_data.py. 
 
 advanced: repeat your SFT data 3 or 4 times in your jsonl (note make_data.py will shuffle all jsonl items) => add some base data (such as slimpajama) to your jsonl => and only repeat 1 times in make_data.py.
 
-**Train RWKV-6**: use /RWKV-v5/ and add --my_testing "x060" to demo-training-prepare.sh and demo-training-run.sh
+**Fix training spikes**: see the "Fixing RWKV-6 Spikes" part on this page. 
 
-**Simple inference for RWKV-5**: https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v5_demo.py
+Or use RWKV-7 (much better). RWKV-7 is very stable and spike-free (verified for 0.1/0.4/1.5/2.9b):
+<img src="RWKV-v7-loss.png" width="500">
 
 **Simple inference for RWKV-6**: https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v6_demo.py
 
-lm_eval: https://github.com/BlinkDL/ChatRWKV/blob/main/run_lm_eval.py
+**Simple inference for RWKV-5**: https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v5_demo.py
 
-chat demo for developers: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py
+**Note: In [state = kv + w * state] everything must be in fp32 because w can be very close to 1. So we can keep state and w in fp32, and convert kv to fp32.**
+
+lm_eval: https://github.com/BlinkDL/ChatRWKV/blob/main/run_lm_eval.py
 
 **Tips for small model / small data**: When I train RWKV music models, I use deep & narrow (such as L29-D512) dimensions, and apply wd and dropout (such as wd=2 dropout=0.02). Note RWKV-LM dropout is very effective - use 1/4 of your usual value.
 
-### HOW TO FINETUNE RWKV-5 MODELS ##
+## HOW TO TRAIN RWKV-7 on Pile (332G tokens) ##
+
+See https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v5/demo-training-prepare-v7-pile.sh and https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v5/demo-training-run-v7-pile.sh
+
+Get these files first:
+
+pile_20B_tokenizer_text_document.bin (664230651068 bytes)
+
+pile_20B_tokenizer_text_document.idx (4212099722 bytes)
+
+### HOW TO FINETUNE RWKV-5 MODELS ###
 
 Use .jsonl format for your data (see https://huggingface.co/BlinkDL/rwkv-5-world for formats).
 
@@ -58,27 +126,61 @@ Use https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v5/make_data.py to tokeniz
 
 Rename the base checkpoint in your model folder to rwkv-init.pth, and change the training commands to use --n_layer 32 --n_embd 4096 --vocab_size 65536 --lr_init 1e-5 --lr_final 1e-5 for 7B.
 
-## RWKV: Parallelizable RNN with Transformer-level LLM Performance (pronounced as "RwaKuv" (rʌkuv in IPA), from 4 major params: R W K V)
+0.1B = --n_layer 12 --n_embd 768 // 0.4B = --n_layer 24 --n_embd 1024 // 1.5B = --n_layer 24 --n_embd 2048 // 3B = --n_layer 32 --n_embd 2560 // 7B = --n_layer 32 --n_embd 4096
+
+### State-tuning (tuning the initial state. zero inference overhead)
+
+Currently unoptimized implementation, takes same vram as full SFT
+
+```--train_type "states" --load_partial 1 --lr_init 1 --lr_final 0.01 --warmup_steps 10 (yes, use very high LR)```
+
+use rwkv 0.8.26+ to auto-load the trained "time_state" 
+
+### Initializing RWKV 5/6 Models ###
+
+When you train RWKV from scratch, try my initialization for best performance. Check generate_init_weight() of src/model.py:
+```
+emb.weight => nn.init.uniform_(a=-1e-4, b=1e-4)
+(Note ln0 of block0 is the layernorm for emb.weight)
+head.weight => nn.init.orthogonal_(gain=0.5*sqrt(n_vocab / n_embd))
+
+att.receptance.weight => nn.init.orthogonal_(gain=1)
+att.key.weight => nn.init.orthogonal_(gain=0.1)
+att.value.weight => nn.init.orthogonal_(gain=1)
+att.gate.weight => nn.init.orthogonal_(gain=0.1)
+att.output.weight => zero
+
+att.ln_x.weight (groupnorm) => ((1 + layer_id) / total_layers) ** 0.7
+
+ffn.key.weight => nn.init.orthogonal_(gain=1)
+ffn.value.weight => zero
+ffn.receptance.weight => zero
+```
+!!! If you are using positional embedding, maybe it's better to remove block.0.ln0 and use default initialization for emb.weight instead of my uniform_(a=-1e-4, b=1e-4) !!!
+
+### Fixing RWKV-6 Spikes ###
+
+0. upgrade to RWKV-7. It's very stable.
+
+1. when training from scratch, add "k = k * torch.clamp(w, max=0).exp()" before "RUN_CUDA_RWKV6(r, k, v, w, u)", and remember to change your inference code too. you will see faster convergence.
+
+2. use "--adam_eps 1e-18"
+
+3. "--beta2 0.95" if you see spikes
+
+4. in trainer.py do "lr = lr * (0.01 + 0.99 * trainer.global_step / w_step)" (originally 0.2 + 0.8), and "--warmup_steps 20"
+
+5. "--weight_decay 0.1" leads to better final loss if you are training lots of data. set lr_final to 1/100 of lr_init when doing this.
+
+## Introducing RWKV
 
 RWKV is an RNN with Transformer-level LLM performance, which can also be directly trained like a GPT transformer (parallelizable). And it's 100% attention-free. You only need the hidden state at position t to compute the state at position t+1. You can use the "GPT" mode to quickly compute the hidden state for the "RNN" mode.
 
 So it's combining the best of RNN and transformer - **great performance, fast inference, saves VRAM, fast training, "infinite" ctx_len, and free sentence embedding** (using the final hidden state).
 
-Our latest version is **RWKV-6**, which is easily Mamba level, and simpler ;) https://twitter.com/BlinkDL_AI/status/1732791817073229881 https://twitter.com/BlinkDL_AI/status/1713967928209752128 (Preview models: https://huggingface.co/BlinkDL/temp )
-
-**RWKV-6 World v2 1.6B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
-
-**RWKV-5 World v2 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
-
-![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
-
-**RWKV Runner GUI** https://github.com/josStorer/RWKV-Runner with one-click install and API
-
-**Raw cutting-edge RWKV weights:** https://huggingface.co/BlinkDL
+**All latest RWKV weights:** https://huggingface.co/BlinkDL
 
 **HF-compatible RWKV weights:** https://huggingface.co/RWKV
-
-**RWKV pip package**: https://pypi.org/project/rwkv/
 
 ```python
 os.environ["RWKV_JIT_ON"] = '1'
@@ -94,49 +196,55 @@ out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 ```
 
-**nanoRWKV**: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel to train, works for any GPU/CPU)
-
-## RWKV Discord: https://discord.gg/bDSBUMeFpc (7k+ members)
-
-**Twitter**: https://twitter.com/BlinkDL_AI
-
-**Homepage**: https://www.rwkv.com/
+nanoRWKV: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel to train, works for any GPU/CPU)
 
 **Cool Community RWKV Projects**:
 
-All (200+) RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
+All (400+) RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
 
-https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel), supports rwkv5
+https://github.com/OpenGVLab/Vision-RWKV Vision RWKV
 
-https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server, supports rwkv5
+https://github.com/feizc/Diffusion-RWKV Diffusion RWKV
 
-https://github.com/saharNooby/rwkv.cpp Fast CPU/cuBLAS/CLBlast inference: int4/int8/fp16/fp32, supports rwkv5
+https://github.com/cgisky1980/ai00_rwkv_server Fastest WebGPU inference (nVidia/AMD/Intel)
 
-https://github.com/daquexian/faster-rwkv supports rwkv5
+https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server
 
-https://github.com/mlc-ai/mlc-llm/pull/1275 supports rwkv5
+https://github.com/saharNooby/rwkv.cpp Fast CPU/cuBLAS/CLBlast inference: int4/int8/fp16/fp32
+
+https://github.com/JL-er/RWKV-PEFT lora/pissa/Qlora/Qpissa/state tuning
 
 https://github.com/RWKV/RWKV-infctx-trainer Infctx trainer
 
-https://github.com/Blealtan/RWKV-LM-LoRA LoRA finetuning
+https://github.com/daquexian/faster-rwkv
+
+https://github.com/mlc-ai/mlc-llm/pull/1275
 
 https://github.com/TheRamU/Fay/blob/main/README_EN.md Digital Assistant with RWKV
 
 https://github.com/harrisonvanderbyl/rwkv-cpp-cuda Fast GPU inference with cuda/amd/vulkan
 
-**RWKV v4 in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
+**RWKV v6 in 250 lines** (with tokenizer too): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v6_demo.py
 
-**🔥 RWKV v5 in 250 lines 🔥** (with tokenizer too): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v5_demo.py
+**RWKV v5 in 250 lines** (with tokenizer too): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_v5_demo.py
+
+**RWKV v4 in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
 
 **RWKV v4 preprint** https://arxiv.org/abs/2305.13048
 
-![RWKV-paper](RWKV-paper.png)
-
 **RWKV v4 introduction, and in 100 lines of numpy**: https://johanwind.github.io/2023/03/23/rwkv_overview.html https://johanwind.github.io/2023/03/23/rwkv_details.html
+
+![RWKV-7](RWKV-v7.png)
+
+![MQAR](Research/RWKV-6-MQAR.png)
+
+![RWKV-paper](RWKV-paper.png)
 
 RWKV v6 illustrated:
 
 ![RWKV-v6](rwkv-x060.png)
+
+![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
 
 A cool paper (Spiking Neural Network) using RWKV: https://github.com/ridgerchu/SpikeGPT
 
